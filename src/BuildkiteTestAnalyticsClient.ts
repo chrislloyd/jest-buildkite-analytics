@@ -89,16 +89,21 @@ export default class BuildkiteTestAnalyticsClient {
     });
   }
 
-  async complete() {
+  async complete(
+    examples: number,
+    failed: number,
+    pending: number,
+    errorsOutsideExamples: number
+  ) {
     if (!this.cable) TODO("no cable");
 
     await this.sendAction({
       action: "end_of_transmission",
       examples_count: {
-        examples: 2,
-        failed: 0,
-        pending: 0,
-        errors_outside_examples: 0,
+        examples,
+        failed,
+        pending,
+        errors_outside_examples: errorsOutsideExamples,
       },
     });
 

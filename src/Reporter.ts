@@ -35,6 +35,11 @@ export default class Reporter extends BaseReporter {
   client: BuildkiteTestAnalyticsClient;
   tracer: Tracer | undefined;
 
+  private tests = 0;
+  private failed = 0;
+  private pending = 0;
+  private errorsOutside = 0;
+
   constructor(private globalConfig: Config.GlobalConfig, private options: any) {
     super();
     const token =
@@ -73,6 +78,8 @@ export default class Reporter extends BaseReporter {
       location = `${relativePath}:${testCaseResult.location.line}:${testCaseResult.location.column}`;
     }
 
+    const result = resultStateFromJestStatus(testCaseResult.status);
+
     const trace = {
       id: uuidv4(),
       scope: testCaseResult.ancestorTitles.join(" "),
@@ -80,12 +87,25 @@ export default class Reporter extends BaseReporter {
       identifier: `${relativePath}:${testCaseResult.title}`,
       location,
       file_name: relativePath,
-      result: resultStateFromJestStatus(testCaseResult.status),
+      result,
       failure: testCaseResult.failureMessages.join("\n"),
       history: span,
     };
 
     await this.client.result(trace);
+
+    this.tests += 1;
+
+    switch (result) {
+      case "failed":
+        this.failed += 1;
+        break;
+      case "skipped":
+        this.pending += 1;
+        break;
+      default:
+        break;
+    }
   }
 
   async onTestResult(
@@ -95,6 +115,6 @@ export default class Reporter extends BaseReporter {
   ) {}
 
   async onRunComplete(contexts: Set<Context>) {
-    await this.client.complete();
+    await this.client.complete(this.tests, this.failed, this.pending, 0);
   }
 }
