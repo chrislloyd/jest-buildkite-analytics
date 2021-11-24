@@ -1,4 +1,4 @@
-# Jest Buildkite Analytics Reporter
+# Jest Buildkite Analytics
 
 ## TODO
 
