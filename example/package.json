@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "scripts": {
+    "test": "jest"
+  },
+  "dependencies": {
+    "jest": "^27.3.1",
+    "ts-node": "^10.4.0"
+  }
+}

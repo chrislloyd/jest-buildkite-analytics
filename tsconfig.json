@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "module": "commonjs",
+    "target": "ES2021",
+    "outDir": "lib"
+  },
+  "include": ["src"]
+}
