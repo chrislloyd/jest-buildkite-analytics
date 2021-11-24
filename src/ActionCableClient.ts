@@ -1,6 +1,7 @@
 import { TODO } from "./todo";
 import * as ws from "ws";
 import { Opaque } from "./Opaque";
+import timeout from "./timeout";
 
 type Channel = Opaque<string, "Channel">;
 
@@ -36,27 +37,35 @@ export class ActionCableClient {
       origin: `https://${this.url.host}`,
     });
 
-    await new Promise<void>((resolve, reject) => {
-      socket.once("open", () => {
-        socket.removeListener("close", reject);
-        resolve();
-      });
-      socket.once("error", reject);
-    });
-
-    await new Promise<void>((resolve, reject) => {
-      socket.once("error", reject);
-      socket.once("message", (data) => {
-        const event = parseIncomingEvent(data);
-        console.log("<-", event);
-        if (event.type === "welcome") {
-          socket.removeListener("error", reject);
+    await timeout(
+      5000,
+      "Opening websocket",
+      new Promise<void>((resolve, reject) => {
+        socket.once("open", () => {
+          socket.removeListener("close", reject);
           resolve();
-        } else {
-          reject();
-        }
-      });
-    });
+        });
+        socket.once("error", reject);
+      })
+    );
+
+    await timeout(
+      5000,
+      "Receiving welcome event",
+      new Promise<void>((resolve, reject) => {
+        socket.once("error", reject);
+        socket.once("message", (data) => {
+          const event = parseIncomingEvent(data);
+          console.log("<-", event);
+          if (event.type === "welcome") {
+            socket.removeListener("error", reject);
+            resolve();
+          } else {
+            reject();
+          }
+        });
+      })
+    );
 
     socket.on("message", (data) => {
       const event = parseIncomingEvent(data);
@@ -68,13 +77,17 @@ export class ActionCableClient {
 
   async stop() {
     const socket = this.currentSocket();
-    await new Promise<void>((resolve) => {
-      socket.once("close", () => {
-        this.socket = undefined;
-        resolve();
-      });
-      socket.close();
-    });
+    await timeout(
+      5000,
+      "Closing websocket",
+      new Promise<void>((resolve) => {
+        socket.once("close", () => {
+          this.socket = undefined;
+          resolve();
+        });
+        socket.close();
+      })
+    );
   }
 
   async subscribe(

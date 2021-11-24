@@ -9,5 +9,6 @@
 - [ ] Publish flow
 - [ ] Tests
 - [ ] Jest environments with added tracing
+- [ ] Remove console logging
 - [x] Wrap up BuildkiteTestAnalytics separate from Reporter
 - [x] Remove hardcoded tokens
