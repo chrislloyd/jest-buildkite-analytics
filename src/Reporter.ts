@@ -1,12 +1,6 @@
-import fetch from "node-fetch";
-import { ActionCable, Subscription } from "./ActionCable";
-import { Opaque } from "./Opaque";
-import { sleep } from "./sleep";
-import { Tracer } from "./Tracer";
-import { createTrace, Trace } from "./Trace";
-import { pickCIEnvVars } from "./env";
-import type { TestCaseResult } from "@jest/test-result";
-import { TODO } from "./Todo";
+import Tracer from "./Tracer";
+import type { Status, TestCaseResult } from "@jest/test-result";
+import { TODO } from "./todo";
 import {
   AggregatedResult,
   BaseReporter,
@@ -15,127 +9,84 @@ import {
   Test,
   TestResult,
 } from "@jest/reporters";
+import BuildkiteTestAnalyticsClient from "./BuildkiteTestAnalyticsClient";
+import * as path from "path";
+import { ResultState } from "./Trace";
+import { v4 as uuidv4 } from "uuid";
 
-type ExamplesCount = {
-  examples: number;
-  failed: number;
-  pending: number;
-  errors_outside_examples: number;
-};
+function testPathRelativeToJestRoot(test: Test) {
+  return "./" + path.relative(test.context.config.rootDir, test.path);
+}
 
-type Action =
-  | { action: "record_results"; results: Array<Trace> }
-  | { action: "end_of_transmission"; examples_count: ExamplesCount };
+function resultStateFromJestStatus(status: Status): ResultState {
+  switch (status) {
+    case "passed":
+      return "passed";
+    case "failed":
+      return "failed";
+    default:
+      return "skipped";
+  }
+}
 
-type Channel = Opaque<string, "Channel">;
-
-type Command =
-  | { command: "subscribe"; identifier: Channel }
-  | { command: "message"; identifier: Channel; data: string };
-
-type Message = { confirm: Array<string> };
-
-type ActionCableEvent =
-  | { type: "welcome" }
-  | { type: "ping"; message: number }
-  | { type: "confirm_subscription"; identifier: Channel }
-  | { type: "reject_subscription"; identifier: Channel }
-  | { type: "message"; identifier: Channel; message: Message };
-
-const BuildkiteAnalyticsUrl = "https://analytics-api.buildkite.com/v1/uploads";
-
-export default class BuildkiteAnalyticsReporter extends BaseReporter {
-  ac: ActionCable | undefined;
-  httpTracer: Tracer | undefined;
-  subscription: Subscription | undefined;
+export default class Reporter extends BaseReporter {
+  client: BuildkiteTestAnalyticsClient | undefined;
+  tracer: Tracer | undefined;
 
   async onRunStart(
     aggregatedResults: AggregatedResult,
     options: ReporterOnStartOptions
   ) {
-    const url = new URL(BuildkiteAnalyticsUrl);
-    const authorizationHeader = `Token token=\"RRSjX1jL6RT9tspd7HRMaH3g\"`;
-    const body = { run_env: pickCIEnvVars() };
-    const response = await fetch(url, {
-      method: "POST",
-      body: JSON.stringify(body),
-      headers: {
-        authorization: authorizationHeader,
-        "content-type": "application/json",
-      },
-    });
-
-    if (response.status === 401) TODO("Bad token");
-    if (response.status !== 200) TODO("Bad req, here's the x-request-id");
-
-    const { id, cable: rawCable, channel } = await response.json();
-    const cable = new URL(rawCable);
-
-    this.ac = new ActionCable(cable, [], {
-      headers: { Authorization: authorizationHeader },
-    });
-
-    await this.ac.start();
-
-    const subscription = await this.ac.createSubscription(channel);
-    this.subscription = subscription;
+    this.client = new BuildkiteTestAnalyticsClient();
+    await this.client.start();
   }
 
   async onTestStart(test: Test) {
-    test.context.hasteFS.getSha1;
-    this.httpTracer = new Tracer();
+    this.tracer = new Tracer();
   }
 
   async onTestCaseResult(test: Test, testCaseResult: TestCaseResult) {
-    if (!this.ac) TODO("blah no ac");
-    if (!this.subscription) TODO("blah no subscription");
-    if (!this.httpTracer) TODO("blah");
+    if (!this.client) TODO("no client");
+    if (!this.tracer) TODO("no test start");
 
-    const trace = createTrace(test, testCaseResult, this.httpTracer);
+    if (testCaseResult.duration === undefined) TODO("empty duration");
 
-    const recordResults: Command = {
-      command: "message",
-      identifier: this.subscription.channel as Channel,
-      data: JSON.stringify({
-        action: "record_results",
-        results: [trace],
-      }),
+    // Duration is empty if an error prevented the test from running in the
+    // first place. If a test runs in sub-milisecond time, we round up to
+    // lowest milisecond.
+    const duration = Math.max(testCaseResult.duration || 0, 1);
+    const span = this.tracer.finalize(duration);
+
+    const relativePath = testPathRelativeToJestRoot(test);
+
+    let location = relativePath;
+    if (testCaseResult.location) {
+      location = `${relativePath}:${testCaseResult.location.line}:${testCaseResult.location.column}`;
+    }
+
+    const trace = {
+      id: uuidv4(),
+      scope: testCaseResult.ancestorTitles.join(" "),
+      name: testCaseResult.title,
+      identifier: `${relativePath}:${testCaseResult.title}`,
+      location,
+      file_name: relativePath,
+      result: resultStateFromJestStatus(testCaseResult.status),
+      failure: testCaseResult.failureMessages.join("\n"),
+      history: span,
     };
 
-    await this.ac.send(recordResults);
+    await this.client.result(trace);
   }
 
   async onTestResult(
     test: Test,
     testResult: TestResult,
     aggregatedResults: AggregatedResult
-  ) {
-    // aggregatedResults.
-  }
+  ) {}
 
   async onRunComplete(contexts: Set<Context>) {
-    if (!this.subscription) TODO("blah no subscription");
-    if (!this.ac) TODO("blah no ac");
-
-    const eot: Command = {
-      command: "message",
-      identifier: this.subscription.channel as Channel,
-      data: JSON.stringify({
-        action: "end_of_transmission",
-        examples_count: {
-          examples: 2,
-          failed: 0,
-          pending: 0,
-          errors_outside_examples: 0,
-        },
-      }),
-    };
-
-    await this.ac.send(eot);
-
-    // TODO: Wait until all unconfirmed tests are confirmed
-    await sleep(1_000);
-
-    await this.ac.stop();
+    if (!this.client) TODO("no client");
+    await this.client.complete();
   }
 }

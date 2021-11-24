@@ -2,7 +2,7 @@ import { Span } from "./Span";
 
 const MS = 1 / 1000;
 
-export class Tracer {
+export default class Tracer {
   top: Span;
   stack: Array<Span>;
 
@@ -33,25 +33,31 @@ export class Tracer {
     this.stack.pop();
   }
 
+  /**
+   * @param duration in miliseconds
+   */
   backfill(section: string, duration: number, detail: any) {
     const now = Date.now();
     const span = {
       section,
       start_at: now - duration,
       end_at: now,
-      duration,
+      duration: duration * MS,
       detail,
       children: [],
     };
     this.currentSpan.children.push(span);
   }
 
+  /**
+   * @param duration in miliseconds
+   */
   finalize(duration: number): Span {
     if (this.stack.length !== 1) {
       throw new Error("Stack not empty");
     }
     this.top.end_at = this.top.start_at + duration;
-    this.top.duration = duration;
+    this.top.duration = duration * MS;
     return this.top;
   }
 }
