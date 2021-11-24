@@ -1,9 +1,10 @@
 import { ActionCableClient, Producer } from "./ActionCableClient";
-import { pickCIEnvVars } from "./env";
 import { TODO } from "./todo";
 import fetch from "node-fetch";
 import { sleep } from "./sleep";
 import { Trace } from "./Trace";
+import { v4 as uuidv4 } from "uuid";
+import pluckFromEnv from "./pluckFromEnv";
 
 type IncomingMessage = { confirm: Array<string> };
 
@@ -22,13 +23,40 @@ const BuildkiteAnalyticsUrl = new URL(
   "https://analytics-api.buildkite.com/v1/uploads"
 );
 
+export function runEnv() {
+  const buildkiteBuildId = pluckFromEnv("BUILDKITE_BUILD_ID");
+  const debug = pluckFromEnv("BUILDKITE_ANALYTICS_DEBUG_ENABLED");
+
+  if (buildkiteBuildId) {
+    return {
+      CI: "buildkite",
+      key: buildkiteBuildId,
+      url: pluckFromEnv("BUILDKITE_BUILD_URL"),
+      branch: pluckFromEnv("BUILDKITE_BRANCH"),
+      commit_sha: pluckFromEnv("BUILDKITE_COMMIT"),
+      number: pluckFromEnv("BUILDKITE_BUILD_NUMBER"),
+      job_id: pluckFromEnv("BUILDKITE_JOB_ID"),
+      message: pluckFromEnv("BUILDKITE_MESSAGE"),
+      debug,
+    };
+  } else {
+    return {
+      CI: undefined,
+      key: uuidv4(),
+      debug,
+    };
+  }
+}
+
 export default class BuildkiteTestAnalyticsClient {
   private cable: ActionCableClient | undefined;
   private send: Producer | undefined;
 
+  constructor(private token: string) {}
+
   async start() {
-    const authorizationHeader = `Token token=\"RRSjX1jL6RT9tspd7HRMaH3g\"`;
-    const body = { run_env: pickCIEnvVars() };
+    const authorizationHeader = `Token token=\"${this.token}\"`;
+    const body = { run_env: runEnv() };
     const response = await fetch(BuildkiteAnalyticsUrl, {
       method: "POST",
       body: JSON.stringify(body),

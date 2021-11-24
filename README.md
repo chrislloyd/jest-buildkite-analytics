@@ -10,3 +10,4 @@
 - [ ] Tests
 - [ ] Jest environments with added tracing
 - [x] Wrap up BuildkiteTestAnalytics separate from Reporter
+- [x] Remove hardcoded tokens
