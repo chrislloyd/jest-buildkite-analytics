@@ -56,7 +56,6 @@ export class ActionCableClient {
         socket.once("error", reject);
         socket.once("message", (data) => {
           const event = parseIncomingEvent(data);
-          console.log("<-", event);
           if (event.type === "welcome") {
             socket.removeListener("error", reject);
             resolve();
@@ -105,7 +104,6 @@ export class ActionCableClient {
       socket.once("error", reject);
       socket.once("message", (data) => {
         const event = JSON.parse(data.toString("utf8"));
-        console.log("<-", event);
         if (
           event.type === "confirm_subscription" &&
           event.identifier === channel
@@ -137,7 +135,6 @@ export class ActionCableClient {
         if (err) {
           reject(err);
         } else {
-          console.log("->", command);
           resolve();
         }
       });
@@ -145,7 +142,6 @@ export class ActionCableClient {
   }
 
   private async handleEvent(event: IncomingEvent) {
-    console.log("<-", event);
     switch (event.type) {
       case "message":
         this.handleMessage(event.identifier, event.message);
