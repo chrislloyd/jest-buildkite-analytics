@@ -3,6 +3,8 @@
 ## TODO
 
 - [ ] Wait for unconfirmed results before closing connection
+- [ ] Fix issue with Tracer instantiation
+- [ ] More stable test identity
 - [ ] Debug location information not showing up
 - [ ] ActionCable timeouts
 - [ ] Publish flow
