@@ -14,7 +14,6 @@ import BuildkiteTestAnalyticsClient from "./BuildkiteTestAnalyticsClient";
 import * as path from "path";
 import { ResultState } from "./Trace";
 import { v4 as uuidv4 } from "uuid";
-import pluckFromEnv from "./pluckFromEnv";
 
 function testPathRelativeToJestRoot(test: Test) {
   return "./" + path.relative(test.context.config.rootDir, test.path);
@@ -32,21 +31,15 @@ function resultStateFromJestStatus(status: Status): ResultState {
 }
 
 export default class Reporter extends BaseReporter {
-  client: BuildkiteTestAnalyticsClient;
-  tracer: Tracer | undefined;
-
+  private client: BuildkiteTestAnalyticsClient;
+  private tracer: Tracer | undefined;
   private tests = 0;
   private failed = 0;
   private pending = 0;
-  private errorsOutside = 0;
 
   constructor(private globalConfig: Config.GlobalConfig, private options: any) {
     super();
-    const token =
-      this.options.token ||
-      pluckFromEnv("BUILDKITE_ANALYTICS_TOKEN") ||
-      TODO("No token specified");
-    this.client = new BuildkiteTestAnalyticsClient(token);
+    this.client = new BuildkiteTestAnalyticsClient(this.options.token);
   }
 
   async onRunStart(

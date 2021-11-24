@@ -4,7 +4,7 @@ import fetch from "node-fetch";
 import { sleep } from "./sleep";
 import { Trace } from "./Trace";
 import { v4 as uuidv4 } from "uuid";
-import pluckFromEnv from "./pluckFromEnv";
+import Env from "./Env";
 
 type IncomingMessage = { confirm: Array<string> };
 
@@ -23,20 +23,20 @@ const BuildkiteAnalyticsUrl = new URL(
   "https://analytics-api.buildkite.com/v1/uploads"
 );
 
-export function runEnv() {
-  const buildkiteBuildId = pluckFromEnv("BUILDKITE_BUILD_ID");
-  const debug = pluckFromEnv("BUILDKITE_ANALYTICS_DEBUG_ENABLED");
+export function runEnv(env: Env) {
+  const buildkiteBuildId = env.pluck("BUILDKITE_BUILD_ID");
+  const debug = env.pluck("BUILDKITE_ANALYTICS_DEBUG_ENABLED");
 
   if (buildkiteBuildId) {
     return {
       CI: "buildkite",
       key: buildkiteBuildId,
-      url: pluckFromEnv("BUILDKITE_BUILD_URL"),
-      branch: pluckFromEnv("BUILDKITE_BRANCH"),
-      commit_sha: pluckFromEnv("BUILDKITE_COMMIT"),
-      number: pluckFromEnv("BUILDKITE_BUILD_NUMBER"),
-      job_id: pluckFromEnv("BUILDKITE_JOB_ID"),
-      message: pluckFromEnv("BUILDKITE_MESSAGE"),
+      url: env.pluck("BUILDKITE_BUILD_URL"),
+      branch: env.pluck("BUILDKITE_BRANCH"),
+      commit_sha: env.pluck("BUILDKITE_COMMIT"),
+      number: env.pluck("BUILDKITE_BUILD_NUMBER"),
+      job_id: env.pluck("BUILDKITE_JOB_ID"),
+      message: env.pluck("BUILDKITE_MESSAGE"),
       debug,
     };
   } else {
@@ -51,12 +51,18 @@ export function runEnv() {
 export default class BuildkiteTestAnalyticsClient {
   private cable: ActionCableClient | undefined;
   private send: Producer | undefined;
+  private token: string;
 
-  constructor(private token: string) {}
+  constructor(token: string, private env: Env = new Env(process.env)) {
+    this.token =
+      token ||
+      this.env.pluck("BUILDKITE_ANALYTICS_TOKEN") ||
+      TODO("No token specified");
+  }
 
   async start() {
     const authorizationHeader = `Token token=\"${this.token}\"`;
-    const body = { run_env: runEnv() };
+    const body = { run_env: runEnv(this.env) };
     const response = await fetch(BuildkiteAnalyticsUrl, {
       method: "POST",
       body: JSON.stringify(body),
